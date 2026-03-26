@@ -71,6 +71,8 @@ export interface Database {
           workspace_id: string;
           name: string;
           slug: string;
+          industry: string | null;
+          website: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -79,6 +81,8 @@ export interface Database {
           workspace_id: string;
           name: string;
           slug: string;
+          industry?: string | null;
+          website?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -87,6 +91,8 @@ export interface Database {
           workspace_id?: string;
           name?: string;
           slug?: string;
+          industry?: string | null;
+          website?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -97,6 +103,7 @@ export interface Database {
           client_id: string;
           name: string;
           status: string;
+          platform: string | null;
           start_date: string | null;
           end_date: string | null;
           created_at: string;
@@ -107,6 +114,7 @@ export interface Database {
           client_id: string;
           name: string;
           status?: string;
+          platform?: string | null;
           start_date?: string | null;
           end_date?: string | null;
           created_at?: string;
@@ -117,6 +125,7 @@ export interface Database {
           client_id?: string;
           name?: string;
           status?: string;
+          platform?: string | null;
           start_date?: string | null;
           end_date?: string | null;
           updated_at?: string;

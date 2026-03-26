@@ -1,20 +1,44 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { AuthForm } from "@/components/auth-form";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/dashboard");
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-950 text-white">
-      <div className="max-w-2xl text-center px-6">
-        <h1 className="text-5xl font-bold tracking-tight mb-4">Atomized</h1>
-        <p className="text-xl text-gray-400 mb-8">
-          Intelligence reporting for marketing agencies. Auto-generate strategic
-          PowerPoint reports from multi-source data.
-        </p>
-        <Link
-          href="/login"
-          className="inline-block rounded-lg bg-indigo-600 px-6 py-3 text-lg font-semibold hover:bg-indigo-500 transition-colors"
-        >
-          Get Started
-        </Link>
+    <main className="flex min-h-screen bg-gray-950 text-white">
+      <div className="flex flex-1 flex-col items-center justify-center px-6">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold tracking-tight">Atomized</h1>
+            <p className="mt-3 text-gray-400">
+              Intelligence reporting for marketing agencies
+            </p>
+          </div>
+          <AuthForm />
+        </div>
+      </div>
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-gray-900 border-l border-gray-800">
+        <div className="max-w-md px-10 text-center">
+          <div className="text-6xl mb-6">&#x26A1;</div>
+          <h2 className="text-2xl font-semibold mb-4">
+            Auto-generate strategic reports
+          </h2>
+          <p className="text-gray-400 leading-relaxed">
+            Connect your marketing data sources, track media metrics, digital
+            outcomes, and business results — then generate PowerPoint reports
+            in seconds.
+          </p>
+        </div>
       </div>
     </main>
   );
