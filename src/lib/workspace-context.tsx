@@ -35,27 +35,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setLoading(false);
-        return;
-      }
 
-      const { data: memberships } = await supabase
-        .from("workspace_members")
-        .select("workspaces(id, name, slug)")
-        .eq("user_id", user.id);
+      // Try to load workspaces (works with or without auth)
+      const { data: allWorkspaces } = await supabase
+        .from("workspaces")
+        .select("id, name, slug");
 
-      const wsList =
-        memberships
-          ?.map((m) => m.workspaces as unknown as Workspace)
-          .filter(Boolean) ?? [];
-
+      const wsList = (allWorkspaces ?? []) as Workspace[];
       setWorkspaces(wsList);
 
-      // Restore from localStorage or pick first
       const savedId =
         typeof window !== "undefined"
           ? localStorage.getItem("atomized_workspace_id")
