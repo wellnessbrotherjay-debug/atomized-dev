@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspacePicker } from "@/components/workspace-picker";
+import { QuickLogModal } from "@/components/quick-log-modal";
 import type { ChangeCategory } from "@/types/database";
 
-interface Client {
+interface Tenant {
   id: string;
   name: string;
 }
@@ -14,62 +15,111 @@ interface Client {
 interface Campaign {
   id: string;
   name: string;
-  client_id: string;
+  tenant_id: string;
 }
 
-interface ChangeEntry {
+interface ChangeEvent {
   id: string;
-  category: ChangeCategory;
-  description: string;
-  changed_at: string;
+  source_platform: string;
+  change_type: string;
+  changed_fields: any;
+  platform_event_timestamp: string;
+  detected_at: string;
+}
+
+interface DecisionContext {
+  id: string;
+  context_type: string;
+  decision_title: string;
+  decision_reason: string;
+  expected_outcome: string | null;
+  status: string;
   created_at: string;
   campaign_id: string | null;
+  requested_by: string | null;
+  metadata: any;
 }
 
-const CATEGORIES: { value: ChangeCategory; label: string }[] = [
-  { value: "budget", label: "Budget Shift" },
-  { value: "creative", label: "Creative Change" },
-  { value: "targeting", label: "Targeting Change" },
-  { value: "bidding", label: "Bidding Change" },
-  { value: "audience", label: "Audience Change" },
-  { value: "other", label: "Other" },
+const CONTEXT_TYPES = [
+  { value: "client_request", label: "Client Request" },
+  { value: "budget_control", label: "Budget Control" },
+  { value: "underperformance", label: "Underperformance" },
+  { value: "overperformance_scale", label: "Overperformance Scale" },
+  { value: "creative_fatigue", label: "Creative Fatigue" },
+  { value: "audience_refinement", label: "Audience Refinement" },
+  { value: "landing_page_issue", label: "Landing Page Issue" },
+  { value: "tracking_issue", label: "Tracking Issue" },
+  { value: "sales_feedback", label: "Sales Feedback" },
+  { value: "compliance_legal", label: "Compliance & Legal" },
+  { value: "inventory_issue", label: "Inventory Issue" },
+  { value: "seasonal_shift", label: "Seasonal Shift" },
+  { value: "competitor_response", label: "Competitor Response" },
+  { value: "platform_learning", label: "Platform Learning" },
+  { value: "test_hypothesis", label: "Test Hypothesis" },
+  { value: "reporting_correction", label: "Reporting Correction" },
+  { value: "technical_error", label: "Technical Error" },
+  { value: "approval_delay", label: "Approval Delay" },
+];
+
+const REQUESTED_BY_TYPES = [
+  { value: "client", label: "Client" },
+  { value: "account_manager", label: "Account Manager" },
+  { value: "paid_media_buyer", label: "Paid Media Buyer" },
+  { value: "analyst", label: "Analyst" },
+  { value: "creative", label: "Creative" },
+  { value: "finance", label: "Finance" },
+  { value: "ops", label: "Operations" },
 ];
 
 export default function ChangeLogPage() {
   const { workspace, loading: wsLoading } = useWorkspace();
-  const [clients, setClients] = useState<Client[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState("");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedClient, setSelectedClient] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState("");
-  const [changes, setChanges] = useState<ChangeEntry[]>([]);
-  const [loadingChanges, setLoadingChanges] = useState(false);
+  const [decisions, setDecisions] = useState<DecisionContext[]>([]);
+  const [events, setEvents] = useState<ChangeEvent[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Form
-  const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
-  const [formCategory, setFormCategory] = useState<ChangeCategory>("budget");
-  const [formDescription, setFormDescription] = useState("");
+  const [formType, setFormType] = useState("optimization");
+  const [formTitle, setFormTitle] = useState("");
+  const [formReason, setFormReason] = useState("");
+  const [formOutcome, setFormOutcome] = useState("");
   const [formCampaign, setFormCampaign] = useState("");
+  const [formRequestedBy, setFormRequestedBy] = useState("");
+  const [formRequestedByType, setFormRequestedByType] = useState("account_manager");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Load clients
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
+  const [modalInitialTitle, setModalInitialTitle] = useState("");
+
+  const openQuickLog = (event: ChangeEvent) => {
+    setSelectedEventId(event.id);
+    setModalInitialTitle(`Context for ${event.change_type.replace(/_/g, " ")}`);
+    setIsModalOpen(true);
+  };
+
+  // Load tenants
   useEffect(() => {
     if (wsLoading || !workspace) return;
     async function load() {
       const supabase = createClient();
       const { data } = await supabase
-        .from("clients")
+        .from("tenants")
         .select("id, name")
-        .eq("workspace_id", workspace!.id)
         .order("name");
-      setClients((data ?? []) as Client[]);
+      setTenants((data ?? []) as Tenant[]);
     }
     load();
   }, [workspace, wsLoading]);
 
-  // Load campaigns when client changes
+  // Load campaigns when tenant changes
   useEffect(() => {
-    if (!selectedClient) {
+    if (!selectedTenant) {
       setCampaigns([]);
       return;
     }
@@ -77,42 +127,61 @@ export default function ChangeLogPage() {
       const supabase = createClient();
       const { data } = await supabase
         .from("campaigns")
-        .select("id, name, client_id")
-        .eq("client_id", selectedClient)
+        .select("id, name, tenant_id")
+        .eq("tenant_id", selectedTenant)
         .order("name");
       setCampaigns((data ?? []) as Campaign[]);
     }
     load();
-  }, [selectedClient]);
+  }, [selectedTenant]);
 
-  // Load change log entries
-  const loadChanges = useCallback(async () => {
-    if (!selectedClient) {
-      setChanges([]);
+  // Load decision context and change events
+  const loadData = useCallback(async () => {
+    if (!selectedTenant) {
+      setDecisions([]);
+      setEvents([]);
       return;
     }
-    setLoadingChanges(true);
+    setLoading(true);
     const supabase = createClient();
 
-    let query = supabase
-      .from("change_log")
-      .select("id, category, description, changed_at, created_at, campaign_id")
-      .eq("client_id", selectedClient)
-      .order("changed_at", { ascending: false })
-      .limit(100);
+    // Fetch human decisions
+    let decQuery = supabase
+      .from("optimization_log")
+      .select("*")
+      .eq("tenant_id", selectedTenant)
+      .order("created_at", { ascending: false })
+      .limit(50);
 
     if (selectedCampaign) {
-      query = query.eq("campaign_id", selectedCampaign);
+      decQuery = decQuery.eq("campaign_id", selectedCampaign);
     }
 
-    const { data } = await query;
-    setChanges((data ?? []) as ChangeEntry[]);
-    setLoadingChanges(false);
-  }, [selectedClient, selectedCampaign]);
+    // Fetch machine events
+    let eventQuery = supabase
+      .from("change_event_registry")
+      .select("*")
+      .eq("tenant_id", selectedTenant)
+      .order("platform_event_timestamp", { ascending: false })
+      .limit(50);
+
+    if (selectedCampaign) {
+      eventQuery = eventQuery.eq("external_campaign_id", selectedCampaign); 
+    }
+
+    const [{ data: decData }, { data: evtData }] = await Promise.all([
+      decQuery,
+      eventQuery
+    ]);
+
+    setDecisions((decData ?? []) as DecisionContext[]);
+    setEvents((evtData ?? []) as ChangeEvent[]);
+    setLoading(false);
+  }, [selectedTenant, selectedCampaign]);
 
   useEffect(() => {
-    loadChanges();
-  }, [loadChanges]);
+    loadData();
+  }, [loadData]);
 
   if (wsLoading) {
     return <div className="flex items-center justify-center h-full text-gray-400">Loading...</div>;
@@ -121,27 +190,35 @@ export default function ChangeLogPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedClient) {
-      setSaveError("Please select a client.");
+    if (!selectedTenant) {
+      setSaveError("Please select a tenant.");
       return;
     }
     setSaveError(null);
     setSaving(true);
 
     const supabase = createClient();
-    const { error } = await supabase.from("change_log").insert({
-      client_id: selectedClient,
+    const { error } = await supabase.from("optimization_log").insert({
+      tenant_id: selectedTenant,
       campaign_id: formCampaign || null,
-      category: formCategory,
-      description: formDescription,
-      changed_at: formDate,
+      change_type: formType,
+      description: formReason,
+      effective_date: new Date().toISOString().split('T')[0],
+      metadata: {
+        title: formTitle,
+        expected_outcome: formOutcome || null,
+        requested_by: formRequestedBy || null,
+        requested_by_type: formRequestedByType
+      }
     });
 
     if (error) {
       setSaveError(error.message);
     } else {
-      setFormDescription("");
-      loadChanges();
+      setFormTitle("");
+      setFormReason("");
+      setFormOutcome("");
+      loadData();
     }
     setSaving(false);
   }
@@ -158,21 +235,21 @@ export default function ChangeLogPage() {
         <p className="text-gray-400 mt-1">Track budget shifts, creative changes, and targeting updates</p>
       </div>
 
-      {/* Client/Campaign selectors */}
+      {/* Tenant/Campaign selectors */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">Client</label>
+          <label className="block text-sm font-medium text-gray-400 mb-1">Tenant</label>
           <select
-            value={selectedClient}
+            value={selectedTenant}
             onChange={(e) => {
-              setSelectedClient(e.target.value);
+              setSelectedTenant(e.target.value);
               setSelectedCampaign("");
             }}
             className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2.5 text-white focus:border-indigo-500 focus:outline-none"
           >
-            <option value="">Select client...</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            <option value="">Select tenant...</option>
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
         </div>
@@ -181,7 +258,7 @@ export default function ChangeLogPage() {
           <select
             value={selectedCampaign}
             onChange={(e) => setSelectedCampaign(e.target.value)}
-            disabled={!selectedClient}
+            disabled={!selectedTenant}
             className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2.5 text-white focus:border-indigo-500 focus:outline-none disabled:opacity-50"
           >
             <option value="">All campaigns</option>
@@ -193,41 +270,45 @@ export default function ChangeLogPage() {
       </div>
 
       {/* Log entry form */}
-      {selectedClient && (
+      {selectedTenant && (
         <form
           onSubmit={handleSubmit}
-          className="rounded-lg border border-gray-800 bg-gray-900/30 p-6 mb-8 space-y-4"
+          className="rounded-xl border border-gray-800 bg-gray-900/50 p-6 mb-10 space-y-6"
         >
-          <h3 className="font-semibold text-white mb-2">Log a Change</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Date of Change</label>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold text-white">Log Decision Context</h3>
+            <span className="text-xs text-gray-500 uppercase tracking-wider">Human Reason Layer</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="col-span-1 lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Decision Title</label>
               <input
-                type="date"
                 required
-                value={formDate}
-                onChange={(e) => setFormDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-white focus:border-indigo-500 focus:outline-none"
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
+                placeholder="e.g. Budget shift for Week 3"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-indigo-500 focus:outline-none transition-colors"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Change Type</label>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Context Type</label>
               <select
-                value={formCategory}
-                onChange={(e) => setFormCategory(e.target.value as ChangeCategory)}
-                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-white focus:border-indigo-500 focus:outline-none"
+                value={formType}
+                onChange={(e) => setFormType(e.target.value)}
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-indigo-500 focus:outline-none transition-colors"
               >
-                {CATEGORIES.map((cat) => (
+                {CONTEXT_TYPES.map((cat) => (
                   <option key={cat.value} value={cat.value}>{cat.label}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Campaign</label>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Campaign</label>
               <select
                 value={formCampaign}
                 onChange={(e) => setFormCampaign(e.target.value)}
-                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-white focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-indigo-500 focus:outline-none transition-colors"
               >
                 <option value="">General (no campaign)</option>
                 {campaigns.map((c) => (
@@ -236,63 +317,174 @@ export default function ChangeLogPage() {
               </select>
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Description</label>
-            <textarea
-              required
-              rows={3}
-              value={formDescription}
-              onChange={(e) => setFormDescription(e.target.value)}
-              placeholder="Describe what changed..."
-              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none resize-none"
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Strategic Reason (The "Why")</label>
+              <textarea
+                required
+                rows={3}
+                value={formReason}
+                onChange={(e) => setFormReason(e.target.value)}
+                placeholder="Describe the business reason or hypothesis..."
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none resize-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Expected Outcome</label>
+              <textarea
+                rows={3}
+                value={formOutcome}
+                onChange={(e) => setFormOutcome(e.target.value)}
+                placeholder="What KPI improvement are you targeting?"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none resize-none transition-colors"
+              />
+            </div>
           </div>
-          {saveError && <p className="text-sm text-red-400">{saveError}</p>}
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold hover:bg-indigo-500 transition-colors disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Log Change"}
-          </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Requested By</label>
+              <input
+                value={formRequestedBy}
+                onChange={(e) => setFormRequestedBy(e.target.value)}
+                placeholder="Name or Client Contact"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-indigo-500 focus:outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Requestor Role</label>
+              <select
+                value={formRequestedByType}
+                onChange={(e) => setFormRequestedByType(e.target.value)}
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white focus:border-indigo-500 focus:outline-none transition-colors"
+              >
+                {REQUESTED_BY_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Commit Decision Context"}
+              </button>
+            </div>
+          </div>
+          {saveError && <p className="text-sm text-red-400 mt-2">{saveError}</p>}
         </form>
       )}
 
-      {/* Change list */}
-      {selectedClient && (
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Change History</h2>
-          {loadingChanges ? (
-            <p className="text-gray-500">Loading...</p>
-          ) : changes.length === 0 ? (
-            <div className="rounded-lg border border-gray-800 p-6 text-center text-gray-500">
-              No changes logged yet.
+      {/* Split view for history/events */}
+      {selectedTenant && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          {/* Strategic Decisions */}
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">Strategic Decisions</h2>
+              <span className="text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">Human Logged</span>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {changes.map((change) => (
-                <div
-                  key={change.id}
-                  className="flex items-start gap-4 rounded-lg border border-gray-800 p-4"
-                >
-                  <div className="shrink-0 mt-0.5">
-                    <CategoryBadge category={change.category} />
+            
+            {loading ? (
+              <p className="text-gray-500 animate-pulse">Loading decisions...</p>
+            ) : decisions.length === 0 ? (
+              <div className="rounded-xl border border-gray-800 border-dashed p-10 text-center text-gray-500">
+                No decisions logged yet.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {decisions.map((dec) => (
+                  <div
+                    key={dec.id}
+                    className="group rounded-xl border border-gray-800 bg-gray-900/20 p-5 hover:bg-gray-900/40 transition-all border-l-4 border-l-indigo-500"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-widest text-indigo-400">
+                        {dec.context_type.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(dec.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <h4 className="text-md font-bold text-white mb-2">{dec.decision_title}</h4>
+                    <p className="text-sm text-gray-400 leading-relaxed mb-4">{dec.decision_reason}</p>
+                    {dec.expected_outcome && (
+                      <div className="text-xs bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                        <span className="text-gray-500 font-semibold mr-2 italic">Intent:</span>
+                        <span className="text-gray-300">{dec.expected_outcome}</span>
+                      </div>
+                    )}
+                    <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-[10px] text-gray-500">
+                      <span>BY: {dec.metadata?.requested_by || "Unknown"}</span>
+                      <span>{getCampaignName(dec.campaign_id) || "Global"}</span>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white">{change.description}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(change.changed_at).toLocaleDateString()}
-                      {getCampaignName(change.campaign_id) && (
-                        <> &middot; {getCampaignName(change.campaign_id)}</>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Machine Detected Events */}
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">Detected Events</h2>
+              <span className="text-xs font-medium text-amber-400 bg-amber-400/10 px-2 py-1 rounded-full border border-amber-400/20">API Change History</span>
             </div>
-          )}
+
+            {loading ? (
+              <p className="text-gray-500 animate-pulse">Syncing platform events...</p>
+            ) : events.length === 0 ? (
+              <div className="rounded-xl border border-gray-800 border-dashed p-10 text-center text-gray-500">
+                No platform activity detected.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {events.map((evt) => (
+                  <div
+                    key={evt.id}
+                    className="flex items-start gap-4 rounded-xl border border-gray-800 bg-gray-900/10 p-4 hover:bg-gray-900/30 transition-all"
+                  >
+                    <div className="shrink-0 mt-1">
+                      <div className={`w-2 h-10 rounded-full ${evt.source_platform === 'meta' ? 'bg-blue-600' : 'bg-red-600'}`}></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-gray-400">{evt.source_platform.toUpperCase()}</span>
+                        <span className="text-[10px] text-gray-600">{new Date(evt.platform_event_timestamp).toLocaleTimeString()}</span>
+                      </div>
+                      <p className="text-sm text-white font-medium">{evt.change_type.replace(/_/g, " ")}</p>
+                      <pre className="text-[10px] text-gray-500 mt-2 bg-black/30 p-2 rounded overflow-x-auto">
+                        {JSON.stringify(evt.changed_fields, null, 2)}
+                      </pre>
+                      <button 
+                        onClick={() => openQuickLog(evt)}
+                        className="mt-3 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 group"
+                      >
+                        Add Context Reason
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      {/* Reusable Modal */}
+      <QuickLogModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => loadData()}
+        tenant_id={selectedTenant}
+        campaignId={selectedCampaign}
+        relatedEventId={selectedEventId}
+        initialTitle={modalInitialTitle}
+      />
     </div>
   );
 }

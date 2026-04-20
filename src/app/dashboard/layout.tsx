@@ -11,7 +11,7 @@ export default function DashboardLayout({
   return (
     <WorkspaceProvider>
       <div className="flex h-screen bg-gray-950 text-white overflow-hidden">
-        <Sidebar userEmail="test@atomized.dev" />
+        <Sidebar userEmail="guest@local" />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </WorkspaceProvider>

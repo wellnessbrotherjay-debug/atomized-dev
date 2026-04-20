@@ -37,22 +37,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const supabase = createClient();
 
       // Try to load workspaces (works with or without auth)
-      const { data: allWorkspaces } = await supabase
+      const { data: workspaces } = await supabase
         .from("workspaces")
         .select("id, name, slug");
 
-      const wsList = (allWorkspaces ?? []) as Workspace[];
+      const wsList = (workspaces ?? []) as Workspace[];
       setWorkspaces(wsList);
 
+      // Restore from localStorage or pick first
       const savedId =
         typeof window !== "undefined"
           ? localStorage.getItem("atomized_workspace_id")
           : null;
       const saved = wsList.find((w) => w.id === savedId);
+      
       if (saved) {
         setWorkspaceState(saved);
       } else if (wsList.length > 0) {
         setWorkspaceState(wsList[0]);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("atomized_workspace_id", wsList[0].id);
+        }
       }
       setLoading(false);
     }

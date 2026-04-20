@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  marketing-db:
+    image: postgres:15-alpine
+    container_name: openclaw-marketing-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-supabase}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supabase}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    ports:
+      - "54322:5432"
+    volumes:
+      - marketing_db_data:/var/lib/postgresql/data
+    networks:
+      - openclaw-marketing
+
+  marketing-api:
+    image: postgrest/postgrest
+    container_name: openclaw-marketing-api
+    ports:
+      - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://${POSTGRES_USER:-supabase}:${POSTGRES_PASSWORD:-supabase}@marketing-db:5432/${POSTGRES_DB:-postgres}
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+    depends_on:
+      - marketing-db
+    networks:
+      - openclaw-marketing
+
+  airbyte:
+    image: airbyte/airbyte-bootloader:latest # This is a placeholder; Airbyte usually needs its own complex compose
+    # For the sake of this integration, I'll assume Airbyte is managed separately OR 
+    # we provide the instructions to run it. I'll include a simple note.
+    container_name: openclaw-airbyte
+    profiles: ["airbyte"] 
+    networks:
+      - openclaw-marketing
+
+networks:
+  openclaw-marketing:
+    driver: bridge
+
+volumes:
+  marketing_db_data:

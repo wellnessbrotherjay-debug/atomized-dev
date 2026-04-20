@@ -65,10 +65,10 @@ export interface Database {
         };
         Relationships: [];
       };
-      clients: {
+      tenants: {
         Row: {
           id: string;
-          workspace_id: string;
+          agency_id: string;
           name: string;
           slug: string;
           industry: string | null;
@@ -78,7 +78,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          workspace_id: string;
+          agency_id: string;
           name: string;
           slug: string;
           industry?: string | null;
@@ -88,7 +88,7 @@ export interface Database {
         };
         Update: {
           id?: string;
-          workspace_id?: string;
+          agency_id?: string;
           name?: string;
           slug?: string;
           industry?: string | null;
@@ -100,7 +100,7 @@ export interface Database {
       campaigns: {
         Row: {
           id: string;
-          client_id: string;
+          tenant_id: string;
           name: string;
           status: string;
           platform: string | null;
@@ -111,7 +111,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          client_id: string;
+          tenant_id: string;
           name: string;
           status?: string;
           platform?: string | null;
@@ -122,7 +122,7 @@ export interface Database {
         };
         Update: {
           id?: string;
-          client_id?: string;
+          tenant_id?: string;
           name?: string;
           status?: string;
           platform?: string | null;
@@ -135,7 +135,7 @@ export interface Database {
       metrics: {
         Row: {
           id: string;
-          client_id: string;
+          tenant_id: string;
           campaign_id: string | null;
           layer_type: LayerType;
           metric_name: string;
@@ -147,7 +147,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          client_id: string;
+          tenant_id: string;
           campaign_id?: string | null;
           layer_type: LayerType;
           metric_name: string;
@@ -159,7 +159,7 @@ export interface Database {
         };
         Update: {
           id?: string;
-          client_id?: string;
+          tenant_id?: string;
           campaign_id?: string | null;
           layer_type?: LayerType;
           metric_name?: string;
@@ -170,38 +170,38 @@ export interface Database {
         };
         Relationships: [];
       };
-      change_log: {
+      optimization_log: {
         Row: {
           id: string;
-          client_id: string;
+          tenant_id: string;
           campaign_id: string | null;
-          category: ChangeCategory;
+          change_type: string;
           description: string;
-          changed_at: string;
-          changed_by: string | null;
+          effective_date: string;
           metadata: Json;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
-          client_id: string;
+          tenant_id: string;
           campaign_id?: string | null;
-          category: ChangeCategory;
+          change_type: string;
           description: string;
-          changed_at: string;
-          changed_by?: string | null;
+          effective_date?: string;
           metadata?: Json;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
-          client_id?: string;
+          tenant_id?: string;
           campaign_id?: string | null;
-          category?: ChangeCategory;
+          change_type?: string;
           description?: string;
-          changed_at?: string;
-          changed_by?: string | null;
+          effective_date?: string;
           metadata?: Json;
+          updated_at?: string;
         };
         Relationships: [];
       };

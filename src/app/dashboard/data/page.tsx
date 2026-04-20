@@ -6,7 +6,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspacePicker } from "@/components/workspace-picker";
 import type { LayerType } from "@/types/database";
 
-interface Client {
+interface Tenant {
   id: string;
   name: string;
 }
@@ -14,7 +14,7 @@ interface Client {
 interface Campaign {
   id: string;
   name: string;
-  client_id: string;
+  tenant_id: string;
 }
 
 interface MetricRow {
@@ -66,9 +66,9 @@ const TABS: { key: TabKey; label: string; metrics: { key: string; label: string 
 
 export default function DataInputPage() {
   const { workspace, loading: wsLoading } = useWorkspace();
-  const [clients, setClients] = useState<Client[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedClient, setSelectedClient] = useState("");
+  const [selectedTenant, setSelectedTenant] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -79,24 +79,23 @@ export default function DataInputPage() {
   const [existingMetrics, setExistingMetrics] = useState<MetricRow[]>([]);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
 
-  // Load clients
+  // Load tenants
   useEffect(() => {
     if (wsLoading || !workspace) return;
     async function load() {
       const supabase = createClient();
       const { data } = await supabase
-        .from("clients")
+        .from("tenants")
         .select("id, name")
-        .eq("workspace_id", workspace!.id)
         .order("name");
-      setClients((data ?? []) as Client[]);
+      setTenants((data ?? []) as Tenant[]);
     }
     load();
   }, [workspace, wsLoading]);
 
-  // Load campaigns when client changes
+  // Load campaigns when tenant changes
   useEffect(() => {
-    if (!selectedClient) {
+    if (!selectedTenant) {
       setCampaigns([]);
       setSelectedCampaign("");
       return;
@@ -105,17 +104,17 @@ export default function DataInputPage() {
       const supabase = createClient();
       const { data } = await supabase
         .from("campaigns")
-        .select("id, name, client_id")
-        .eq("client_id", selectedClient)
+        .select("id, name, tenant_id")
+        .eq("tenant_id", selectedTenant)
         .order("name");
       setCampaigns((data ?? []) as Campaign[]);
     }
     load();
-  }, [selectedClient]);
+  }, [selectedTenant]);
 
-  // Load existing metrics for selected client
+  // Load existing metrics for selected tenant
   const loadExistingMetrics = useCallback(async () => {
-    if (!selectedClient) {
+    if (!selectedTenant) {
       setExistingMetrics([]);
       return;
     }
@@ -124,7 +123,7 @@ export default function DataInputPage() {
     let query = supabase
       .from("metrics")
       .select("id, layer_type, metric_name, metric_value, period_start, period_end, source, created_at")
-      .eq("client_id", selectedClient)
+      .eq("tenant_id", selectedTenant)
       .order("period_start", { ascending: false })
       .limit(50);
 
@@ -135,7 +134,7 @@ export default function DataInputPage() {
     const { data } = await query;
     setExistingMetrics((data ?? []) as MetricRow[]);
     setLoadingMetrics(false);
-  }, [selectedClient, selectedCampaign]);
+  }, [selectedTenant, selectedCampaign]);
 
   useEffect(() => {
     loadExistingMetrics();
@@ -151,8 +150,8 @@ export default function DataInputPage() {
   }
 
   async function handleSave() {
-    if (!selectedClient || !periodStart || !periodEnd) {
-      setSaveMessage("Please select a client and set the period dates.");
+    if (!selectedTenant || !periodStart || !periodEnd) {
+      setSaveMessage("Please select a tenant and set the period dates.");
       return;
     }
 
@@ -161,7 +160,7 @@ export default function DataInputPage() {
 
     const supabase = createClient();
     const rows: {
-      client_id: string;
+      tenant_id: string;
       campaign_id: string | null;
       layer_type: LayerType;
       metric_name: string;
@@ -175,7 +174,7 @@ export default function DataInputPage() {
         const val = values[metric.key];
         if (val && val !== "" && !isNaN(Number(val))) {
           rows.push({
-            client_id: selectedClient,
+            tenant_id: selectedTenant,
             campaign_id: selectedCampaign || null,
             layer_type: tab.key as LayerType,
             metric_name: metric.key,
@@ -206,7 +205,7 @@ export default function DataInputPage() {
   }
 
   const filteredCampaigns = campaigns.filter(
-    (c) => c.client_id === selectedClient
+    (c) => c.tenant_id === selectedTenant
   );
 
   return (
@@ -219,18 +218,18 @@ export default function DataInputPage() {
       {/* Selectors */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">Client</label>
+          <label className="block text-sm font-medium text-gray-400 mb-1">Tenant</label>
           <select
-            value={selectedClient}
+            value={selectedTenant}
             onChange={(e) => {
-              setSelectedClient(e.target.value);
+              setSelectedTenant(e.target.value);
               setSelectedCampaign("");
             }}
             className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2.5 text-white focus:border-indigo-500 focus:outline-none"
           >
-            <option value="">Select client...</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            <option value="">Select tenant...</option>
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
         </div>
@@ -239,7 +238,7 @@ export default function DataInputPage() {
           <select
             value={selectedCampaign}
             onChange={(e) => setSelectedCampaign(e.target.value)}
-            disabled={!selectedClient}
+            disabled={!selectedTenant}
             className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2.5 text-white focus:border-indigo-500 focus:outline-none disabled:opacity-50"
           >
             <option value="">All campaigns</option>
@@ -327,14 +326,14 @@ export default function DataInputPage() {
       </div>
 
       {/* Existing data table */}
-      {selectedClient && (
+      {selectedTenant && (
         <div>
           <h2 className="text-lg font-semibold mb-4">Previously Entered Data</h2>
           {loadingMetrics ? (
             <p className="text-gray-500">Loading...</p>
           ) : existingMetrics.length === 0 ? (
             <div className="rounded-lg border border-gray-800 p-6 text-center text-gray-500">
-              No data entered yet for this client.
+              No data entered yet for this tenant.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-gray-800">

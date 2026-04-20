@@ -4,17 +4,18 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
 import { WorkspacePicker } from "@/components/workspace-picker";
+import { FormattedDate } from "@/components/ui/formatted-date";
 
 interface SummaryData {
-  totalClients: number;
+  totalTenants: number;
   totalCampaigns: number;
   totalMetricEntries: number;
   recentChanges: {
     id: string;
     description: string;
-    category: string;
-    changed_at: string;
-    client_name?: string;
+    change_type: string;
+    created_at: string;
+    tenant_name?: string;
   }[];
 }
 
@@ -33,45 +34,41 @@ export default function DashboardPage() {
       setLoading(true);
       const supabase = createClient();
 
-      const [clientsRes, campaignsRes, metricsRes, changesRes] =
+      const [tenantsRes, campaignsRes, metricsRes, changesRes] =
         await Promise.all([
           supabase
-            .from("clients")
-            .select("id", { count: "exact", head: true })
-            .eq("workspace_id", workspace!.id),
+            .from("tenants")
+            .select("id", { count: "exact", head: true }),
           supabase
             .from("campaigns")
-            .select("id, clients!inner(workspace_id)", {
+            .select("id", {
               count: "exact",
               head: true,
-            })
-            .eq("clients.workspace_id", workspace!.id),
+            }),
           supabase
             .from("metrics")
-            .select("id, clients!inner(workspace_id)", {
+            .select("id", {
               count: "exact",
               head: true,
-            })
-            .eq("clients.workspace_id", workspace!.id),
+            }),
           supabase
-            .from("change_log")
-            .select("id, description, category, changed_at, clients!inner(name, workspace_id)")
-            .eq("clients.workspace_id", workspace!.id)
-            .order("changed_at", { ascending: false })
+            .from("optimization_log")
+            .select("id, description, change_type, created_at, tenants(name)")
+            .order("created_at", { ascending: false })
             .limit(10),
         ]);
 
       setData({
-        totalClients: clientsRes.count ?? 0,
+        totalTenants: tenantsRes.count ?? 0,
         totalCampaigns: campaignsRes.count ?? 0,
         totalMetricEntries: metricsRes.count ?? 0,
         recentChanges:
-          changesRes.data?.map((c) => ({
+          changesRes.data?.map((c: any) => ({
             id: c.id,
             description: c.description,
-            category: c.category,
-            changed_at: c.changed_at,
-            client_name: (c.clients as unknown as { name: string })?.name,
+            change_type: c.change_type,
+            created_at: c.created_at,
+            tenant_name: (c.tenants as unknown as { name: string })?.name,
           })) ?? [],
       });
       setLoading(false);
@@ -104,8 +101,8 @@ export default function DashboardPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
         <SummaryCard
-          label="Total Clients"
-          value={loading ? "..." : String(data?.totalClients ?? 0)}
+          label="Total Tenants"
+          value={loading ? "..." : String(data?.totalTenants ?? 0)}
           color="indigo"
         />
         <SummaryCard
@@ -120,14 +117,19 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Strategic Context Layer */}
+      <div className="mb-12">
+        <p className="text-gray-500 italic mb-4">Strategic decision intelligence is now active across all accounts.</p>
+      </div>
+
       {/* Recent activity */}
       <div>
         <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
         {loading ? (
-          <p className="text-gray-500">Loading...</p>
+          <p className="text-gray-500 animate-pulse">Syncing strategic audit trail...</p>
         ) : data?.recentChanges.length === 0 ? (
-          <div className="rounded-lg border border-gray-800 p-8 text-center text-gray-500">
-            No recent activity. Start by adding clients and logging changes.
+          <div className="rounded-lg border border-gray-800 border-dashed p-8 text-center text-gray-500">
+            No recent activity. Start by adding tenants and logging strategic optimizations.
           </div>
         ) : (
           <div className="space-y-2">
@@ -136,13 +138,13 @@ export default function DashboardPage() {
                 key={change.id}
                 className="flex items-start gap-4 rounded-lg border border-gray-800 p-4"
               >
-                <CategoryBadge category={change.category} />
+                <CategoryBadge category={change.change_type} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white">{change.description}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {change.client_name} &middot;{" "}
-                    {new Date(change.changed_at).toLocaleDateString()}
-                  </p>
+                   <p className="text-sm text-white">{change.description}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {change.tenant_name} &middot;{" "}
+                      <FormattedDate date={change.created_at} />
+                    </p>
                 </div>
               </div>
             ))}
