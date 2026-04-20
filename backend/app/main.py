@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .utils.db import init_db
-from .routers import context, reports, ingestion, tenants, widgets, admin
+from .routers import context, reports, ingestion, tenants, widgets, admin, oauth, crm, analytics
 
 def create_app() -> FastAPI:
     application = FastAPI(
@@ -35,6 +35,9 @@ def create_app() -> FastAPI:
     application.include_router(ingestion.router, prefix="/api/ingestion", tags=["ingestion / connections"])
     application.include_router(widgets.router, prefix="/api/widgets", tags=["widgets"])
     application.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+    application.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
+    application.include_router(crm.router, prefix="/api/crm", tags=["crm"])
+    application.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 
     @application.on_event("startup")
     async def startup_event():

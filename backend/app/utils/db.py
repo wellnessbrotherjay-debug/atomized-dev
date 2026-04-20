@@ -4,15 +4,22 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# For this demo/skeleton, we use SQLite in-memory or a local file.
-# In production, this would connect to the Supabase PostgreSQL string.
-SQLALCHEMY_DATABASE_URL = "sqlite:///./marketing_os.db"
+import os
+from dotenv import load_dotenv
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool
-)
+load_dotenv()
+
+# Use Supabase/Postgres in production
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./marketing_os.db")
+
+is_sqlite = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
+
+engine_args = {}
+if is_sqlite:
+    engine_args["connect_args"] = {"check_same_thread": False}
+    engine_args["poolclass"] = StaticPool
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():

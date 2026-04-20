@@ -23,16 +23,11 @@ export function useReporting() {
     }
   }, []);
 
-  const triggerReportRun = useCallback(async (tenant_id: string, template_id: string, period_start: string, period_end: string) => {
+  const getPerformanceAnalytics = useCallback(async (tenant_id: string, start: string, end: string) => {
     setLoading(true);
-    setError(null);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/reports/run/${tenant_id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template_id, period_start, period_end }),
-      });
-      if (!response.ok) throw new Error("Failed to trigger report run");
+      const response = await fetch(`${BACKEND_URL}/api/analytics/performance/${tenant_id}?period_start=${start}&period_end=${end}`);
+      if (!response.ok) throw new Error("Failed to fetch performance data");
       return await response.json();
     } catch (err: any) {
       setError(err.message);
@@ -42,5 +37,16 @@ export function useReporting() {
     }
   }, []);
 
-  return { loading, error, getReportPreview, triggerReportRun };
+  const getAttributionAnalytics = useCallback(async (tenant_id: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/analytics/attribution/${tenant_id}`);
+      if (!response.ok) throw new Error("Failed to fetch attribution data");
+      return await response.json();
+    } catch (err: any) {
+      setError(err.message);
+      return null;
+    }
+  }, []);
+
+  return { loading, error, getReportPreview, triggerReportRun, getPerformanceAnalytics, getAttributionAnalytics };
 }

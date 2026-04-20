@@ -1,13 +1,11 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
-import { mockSupabaseClient } from "./mock-client";
-
 export function createClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  if (!url || !url.startsWith("http") || !anonKey || anonKey.includes("your-supabase-anon-key")) {
-    return mockSupabaseClient as any;
+  if (!url || !anonKey) {
+    throw new Error("Missing Supabase environment variables");
   }
 
   return createBrowserClient<Database>(url, anonKey);

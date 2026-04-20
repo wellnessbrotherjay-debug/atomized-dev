@@ -110,7 +110,7 @@ export function AddConnectionModal({ onClose, onSuccess, tenantId }: AddConnecti
           )}
 
           {step === 2 && (
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-6">
               <button 
                 type="button"
                 onClick={() => setStep(1)}
@@ -120,48 +120,34 @@ export function AddConnectionModal({ onClose, onSuccess, tenantId }: AddConnecti
               </button>
               
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-400 mb-2">Account ID</label>
-                  <input
-                    type="text"
-                    required
-                    value={accountId}
-                    onChange={(e) => setAccountId(e.target.value)}
-                    placeholder="e.g. act_123456789"
-                    className="w-full bg-gray-900 border border-gray-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-400 mb-2">Access Token / API Key</label>
-                  <input
-                    type="password"
-                    required
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder="shpat_..."
-                    className="w-full bg-gray-900 border border-gray-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono"
-                  />
+                <div className="p-6 rounded-3xl bg-indigo-600/5 border border-indigo-500/10 text-center">
+                   <h3 className="text-lg font-bold mb-2">Secure Authentication</h3>
+                   <p className="text-sm text-gray-400 mb-6">Redirecting to {platform?.replace('_', ' ').toUpperCase()} to establish a secure connection.</p>
+                   
+                   <button
+                    onClick={async () => {
+                      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+                      const provider = platform === 'google_ads' ? 'google' : 'meta';
+                      const res = await fetch(`${backendUrl}/api/oauth/${provider}/login?tenant_id=${tenantId}`);
+                      const { url } = await res.json();
+                      window.location.href = url;
+                    }}
+                    className="w-full flex items-center justify-center gap-3 bg-white text-black py-4 rounded-2xl font-bold hover:bg-gray-200 transition-all active:scale-[0.98]"
+                   >
+                     <Globe className="w-5 h-5" />
+                     Continue with {platform?.replace('_', ' ').toUpperCase()}
+                   </button>
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-indigo-600/5 border border-indigo-500/20 flex gap-4">
-                <ShieldCheck className="w-6 h-6 text-indigo-400 shrink-0" />
+              <div className="p-4 rounded-2xl bg-gray-900 border border-gray-800 flex gap-4">
+                <ShieldCheck className="w-6 h-6 text-emerald-400 shrink-0" />
                 <p className="text-sm text-gray-400">
-                  Your credentials are encrypted using industry-standard AES-256 and stored in the Atomized Vault.
+                  Atomized uses official APIs and never stores your raw login credentials. 
+                  Access can be revoked at any time.
                 </p>
               </div>
-
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-white text-black py-5 rounded-[1.5rem] font-bold text-lg hover:bg-gray-200 transition-all active:scale-[0.98] disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="w-6 h-6 animate-spin text-white" /> : "Establish Connection"}
-                {!submitting && <ArrowRight className="w-5 h-5 ml-1" />}
-              </button>
-            </form>
+            </div>
           )}
         </div>
       </div>

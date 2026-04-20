@@ -59,7 +59,8 @@ export default function IntelligenceHub() {
   const [generating, setGenerating] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [aiNarrative, setAiNarrative] = useState<any>(null);
-  const { getReportPreview, loading: aiLoading } = useReporting();
+  const [performanceData, setPerformanceData] = useState<any[]>([]);
+  const { getReportPreview, getPerformanceAnalytics, loading: aiLoading } = useReporting();
 
   useEffect(() => {
     setMounted(true);
@@ -75,6 +76,14 @@ export default function IntelligenceHub() {
 
       if (data) setEvents(data);
       
+      // Fetch Real Performance Metrics
+      const perf = await getPerformanceAnalytics(
+        workspace?.id || "", 
+        "2026-04-01", 
+        "2026-04-20"
+      );
+      if (perf) setPerformanceData(perf);
+
       // Fetch AI Insight Preview
       const preview = await getReportPreview(
         workspace?.id || "", 
@@ -200,9 +209,9 @@ export default function IntelligenceHub() {
           </div>
           
           <div className="h-[350px] w-full">
-            {mounted ? (
+            {mounted && performanceData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={MOCK_PERFORMANCE_DATA}>
+              <AreaChart data={performanceData}>
                 <defs>
                   <linearGradient id="colorCpl" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>

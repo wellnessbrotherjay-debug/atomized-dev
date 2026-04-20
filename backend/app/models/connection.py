@@ -18,6 +18,12 @@ class Connection(Base):
     config = Column(JSON, default={})
     status = Column(String(50), default="pending")
     
+    # OAuth Fields
+    access_token = Column(String(1024))
+    refresh_token = Column(String(1024))
+    token_expiry = Column(DateTime(timezone=True))
+    scopes = Column(JSON, default=[])
+    
     last_synced_at = Column(DateTime(timezone=True))
     next_sync_at = Column(DateTime(timezone=True))
     

@@ -1,15 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
-import { mockSupabaseClient } from "./mock-client";
-
 export async function createClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!url || !url.startsWith("http") || !anonKey || anonKey.includes("your-supabase-anon-key")) {
-    return mockSupabaseClient as any;
+  if (!url || !anonKey) {
+    throw new Error("Missing Supabase environment variables");
   }
 
   const cookieStore = await cookies();

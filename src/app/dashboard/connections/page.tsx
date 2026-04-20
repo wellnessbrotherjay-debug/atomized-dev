@@ -13,11 +13,13 @@ import {
   ArrowRight
 } from "lucide-react";
 import { AddConnectionModal } from "@/components/modals/add-connection-modal";
+import { AccountSelectorModal } from "@/components/modals/account-selector-modal";
 
 interface Connection {
   id: string;
   source_type: string;
   account_label: string;
+  external_account_id?: string;
   status: string;
   last_synced_at: string | null;
 }
@@ -31,6 +33,7 @@ export default function ConnectionsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState(false);
+  const [selectorConnection, setSelectorConnection] = useState<{id: string, type: string} | null>(null);
 
   useEffect(() => {
     if (!workspace) return;
@@ -69,6 +72,12 @@ export default function ConnectionsPage() {
           if (connRes.ok) {
             const data = await connRes.json();
             setConnections(data);
+
+            // AUTO-TRIGGER: If a connection just finished OAuth but has no ID, open selector
+            const pending = data.find((c: Connection) => c.status === 'active' && !c.external_account_id);
+            if (pending) {
+              setSelectorConnection({ id: pending.id, type: pending.source_type });
+            }
           }
         } else {
           setActiveTenantId(null);
@@ -134,6 +143,18 @@ export default function ConnectionsPage() {
         />
       )}
 
+      {selectorConnection && (
+        <AccountSelectorModal
+          connectionId={selectorConnection.id}
+          sourceType={selectorConnection.type}
+          onClose={() => setSelectorConnection(null)}
+          onSuccess={() => {
+            setSelectorConnection(null);
+            window.location.reload();
+          }}
+        />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
           Array(3).fill(0).map((_, i) => (
@@ -150,7 +171,12 @@ export default function ConnectionsPage() {
           </div>
         ) : (
           connections.map((conn) => (
-            <ConnectionCard key={conn.id} connection={conn} onSync={triggerSync} />
+            <ConnectionCard 
+              key={conn.id} 
+              connection={conn} 
+              onSync={triggerSync} 
+              onConfigure={() => setSelectorConnection({ id: conn.id, type: conn.source_type })}
+            />
           ))
         )}
       </div>
@@ -171,9 +197,21 @@ export default function ConnectionsPage() {
   );
 }
 
-function ConnectionCard({ connection, onSync }: { connection: Connection, onSync: (id: string) => void }) {
+function ConnectionCard({ 
+  connection, 
+  onSync, 
+  onConfigure 
+}: { 
+  connection: Connection, 
+  onSync: (id: string) => void,
+  onConfigure: () => void
+}) {
+  const needsConfig = !connection.external_account_id;
+
   return (
-    <div className="rounded-3xl border border-gray-800 bg-gray-900/50 p-8 flex flex-col justify-between hover:border-indigo-500/30 transition-all group">
+    <div className={`rounded-3xl border p-8 flex flex-col justify-between transition-all group ${
+      needsConfig ? 'border-indigo-500/50 bg-indigo-500/5 shadow-lg shadow-indigo-500/10' : 'border-gray-800 bg-gray-900/50 hover:border-indigo-500/30'
+    }`}>
       <div>
         <div className="flex items-center justify-between mb-6">
           <div className="p-3 rounded-2xl bg-gray-950 border border-gray-800 group-hover:border-indigo-500/20 transition-all">
@@ -189,6 +227,12 @@ function ConnectionCard({ connection, onSync }: { connection: Connection, onSync
         
         <h3 className="text-xl font-bold mb-1">{connection.account_label || connection.source_type}</h3>
         <p className="text-xs text-gray-500 font-medium uppercase tracking-tighter">{connection.source_type.replace('_', ' ')}</p>
+
+        {needsConfig && (
+          <div className="mt-4 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300 font-medium animate-pulse">
+            Selection Required: Choose an account to begin ingestion.
+          </div>
+        )}
       </div>
 
       <div className="mt-12 flex items-center justify-between">
@@ -196,12 +240,24 @@ function ConnectionCard({ connection, onSync }: { connection: Connection, onSync
           <p className="text-gray-500 mb-0.5">Last Sync</p>
           <p className="font-medium text-gray-300">{connection.last_synced_at ? new Date(connection.last_synced_at).toLocaleDateString() : 'Never'}</p>
         </div>
-        <button 
-          onClick={() => onSync(connection.id)}
-          className="p-3 rounded-xl bg-gray-950 border border-gray-800 hover:text-indigo-400 hover:border-indigo-500/30 transition-all active:scale-90"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
+        
+        <div className="flex gap-2">
+          {needsConfig ? (
+            <button 
+              onClick={onConfigure}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-500/20"
+            >
+              Complete Setup
+            </button>
+          ) : (
+            <button 
+              onClick={() => onSync(connection.id)}
+              className="p-3 rounded-xl bg-gray-950 border border-gray-800 hover:text-indigo-400 hover:border-indigo-500/30 transition-all active:scale-90"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

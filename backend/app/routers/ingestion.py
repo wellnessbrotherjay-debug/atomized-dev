@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 from ..models.connection import Connection
 from ..models.ingestion_run import IngestionRun
 from ..utils.db import SessionLocal
+from ..services.token_service import token_service
+from ..services.marketing.google_ads import GoogleAdsService
+from ..services.marketing.meta_ads import MetaAdsService
+from ..services.marketing.google_analytics import GoogleAnalyticsService
 
 router = APIRouter()
 
@@ -67,5 +71,41 @@ def list_connection_runs(connection_id: str, limit: int = Query(10), db: Session
             "status": r.status,
             "rows_loaded": r.rows_loaded,
             "finished_at": r.finished_at
-        } for r in runs
-    ]
+@router.get("/connections/{connection_id}/discover")
+async def discover_connection_accounts(connection_id: str, db: Session = Depends(get_db)):
+    """Fetch all sub-accounts (Ads accounts, GA properties) accessible via this connection."""
+    conn = db.query(Connection).filter(Connection.id == connection_id).first()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Connection not found")
+        
+    # Ensure token is fresh
+    token = await token_service.ensure_active_token(db, conn)
+    
+    accounts = []
+    try:
+        if conn.source_type == "google_ads":
+            service = GoogleAdsService(conn.refresh_token)
+            accounts = service.list_accessible_customers()
+        elif conn.source_type == "ga4":
+            service = GoogleAnalyticsService(conn.refresh_token)
+            accounts = service.list_accessible_properties()
+        # Add Meta logic here if needed
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Discovery failed: {str(e)}")
+        
+    return accounts
+
+@router.patch("/connections/{connection_id}")
+def update_connection(connection_id: str, payload: Dict[str, Any], db: Session = Depends(get_db)):
+    """Update connection settings (e.g., link to a specific account ID)."""
+    conn = db.query(Connection).filter(Connection.id == connection_id).first()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Connection not found")
+        
+    for key, value in payload.items():
+        if hasattr(conn, key):
+            setattr(conn, key, value)
+            
+    db.commit()
+    db.refresh(conn)
+    return {"status": "success", "id": conn.id}

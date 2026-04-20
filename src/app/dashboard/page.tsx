@@ -9,7 +9,8 @@ import { FormattedDate } from "@/components/ui/formatted-date";
 interface SummaryData {
   totalTenants: number;
   totalCampaigns: number;
-  totalMetricEntries: number;
+  totalLeads: number;
+  pipelineValue: number;
   recentChanges: {
     id: string;
     description: string;
@@ -32,25 +33,13 @@ export default function DashboardPage() {
 
     async function load() {
       setLoading(true);
-      const supabase = createClient();
+      try {
+        const supabase = createClient();
 
-      const [tenantsRes, campaignsRes, metricsRes, changesRes] =
-        await Promise.all([
-          supabase
-            .from("tenants")
-            .select("id", { count: "exact", head: true }),
-          supabase
-            .from("campaigns")
-            .select("id", {
-              count: "exact",
-              head: true,
-            }),
-          supabase
-            .from("metrics")
-            .select("id", {
-              count: "exact",
-              head: true,
-            }),
+        const [tenantsRes, campaignsRes, leadsRes, changesRes] = await Promise.all([
+          supabase.from("tenants").select("id", { count: "exact", head: true }),
+          supabase.from("campaigns").select("id", { count: "exact", head: true }),
+          supabase.from("leads").select("id, value"),
           supabase
             .from("optimization_log")
             .select("id, description, change_type, created_at, tenants(name)")
@@ -58,20 +47,28 @@ export default function DashboardPage() {
             .limit(10),
         ]);
 
-      setData({
-        totalTenants: tenantsRes.count ?? 0,
-        totalCampaigns: campaignsRes.count ?? 0,
-        totalMetricEntries: metricsRes.count ?? 0,
-        recentChanges:
-          changesRes.data?.map((c: any) => ({
-            id: c.id,
-            description: c.description,
-            change_type: c.change_type,
-            created_at: c.created_at,
-            tenant_name: (c.tenants as unknown as { name: string })?.name,
-          })) ?? [],
-      });
-      setLoading(false);
+        const totalLeads = leadsRes.data?.length ?? 0;
+        const pipelineValue = leadsRes.data?.reduce((sum, lead) => sum + (Number(lead.value) || 0), 0) ?? 0;
+
+        setData({
+          totalTenants: tenantsRes.count ?? 0,
+          totalCampaigns: campaignsRes.count ?? 0,
+          totalLeads,
+          pipelineValue,
+          recentChanges:
+            changesRes.data?.map((c: any) => ({
+              id: c.id,
+              description: c.description,
+              change_type: c.change_type,
+              created_at: c.created_at,
+              tenant_name: (c.tenants as unknown as { name: string })?.name,
+            })) ?? [],
+        });
+      } catch (err) {
+        console.error("Dashboard load failed:", err);
+      } finally {
+        setLoading(false);
+      }
     }
 
     load();
@@ -99,21 +96,26 @@ export default function DashboardPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-10">
         <SummaryCard
-          label="Total Tenants"
+          label="Tenants"
           value={loading ? "..." : String(data?.totalTenants ?? 0)}
           color="indigo"
         />
         <SummaryCard
-          label="Total Campaigns"
+          label="Active Campaigns"
           value={loading ? "..." : String(data?.totalCampaigns ?? 0)}
           color="emerald"
         />
         <SummaryCard
-          label="Metric Entries"
-          value={loading ? "..." : String(data?.totalMetricEntries ?? 0)}
+          label="Total Leads"
+          value={loading ? "..." : String(data?.totalLeads ?? 0)}
           color="amber"
+        />
+        <SummaryCard
+          label="Pipeline Value"
+          value={loading ? "..." : `$${(data?.pipelineValue ?? 0).toLocaleString()}`}
+          color="indigo"
         />
       </div>
 
